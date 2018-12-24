@@ -1,18 +1,17 @@
 #ifndef SOCKET_HPP
 #define SOCKET_HPP
 
+#include <arpa/inet.h>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
-#include <unistd.h>
-#include <cerrno>
-#include <string>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <string>
 #include <mutex>
+#include <netinet/in.h>
+#include <string>
+#include <sys/socket.h>
+#include <sys/types.h>
 #include <vector>
+#include <unistd.h>
 
 /*
  * Written in modern C++, this lightweight library provides an object overlay for using POSIX sockets.
@@ -33,17 +32,17 @@ namespace socket_overlay {
 			private:
 				static unsigned int instances_count;
 				// socket principal
-				int socket_ = 0;
-				// sockets secondaires qui sont créés lors d'une connexion avec un client
+				int socket_ = 0,
+					sin_size = 0,
+					yes = 1,
+					// valeur de connexion maximum en simultanées 10 par défaut
+					max_simultaneous = 0;
+				// sockets secondaires qui sont cr?s lors d'une connexion avec un client
 				std::vector<int> socketfd_ = {};
 				// structure contenant les information de connexion distante
-				struct sockaddr_in their_addr = nullptr;
+				struct sockaddr_in their_addr = nullptr,
 				// structure contenant les information de connexion local
-				struct sockaddr_in my_addr = nullptr;
-				int sin_size = 0;
-				int yes = 1;
-				// valeur de connexion maximum en simultané. 10 par défaut
-				int max_simultaneous = 0;
+					sockaddr_in my_addr = nullptr;
 				std::mutex mtx = nullptr;
 		/* METHODS */
 			public:
@@ -59,23 +58,23 @@ namespace socket_overlay {
 					~socket_overlay() noexcept { --instances_count; }
 				// getters
 					int getSocket(unsigned int id){ return (id < 0 ? socket_ : socketfd_[id]); }
-					const std::vector<int>& getSockets(){ return &socketfd_; }
+					const std::vector& getSockets(){ return &socketfd_; }
 					size_t size(){ return socketfd_.size(); }
 				// setters
 					// Initialisation de la structure sockadr_in. Preciser le port local (utile uniquement pour les serveurs)
 					void setMyAddr(int port_){
 						//pour un serveur
-						my_addr.sin_addr.s_addr = INADDR_ANY;                               // adresse, devrait être converti en reseau mais est egal à 0
-						my_addr.sin_family = AF_INET;                                       // type de la socket
-						my_addr.sin_port = htons(port_);                                    // port, converti en reseau
-						bzero(&(my_addr.sin_zero), 8);                                      // mise a zero du reste de la structure
+						my_addr.sin_addr.s_addr = INADDR_ANY;							// adresse, devrait ?re converti en reseau mais est egal ?0
+						my_addr.sin_family = AF_INET;									// type de la socket
+						my_addr.sin_port = htons(port_);								// port, converti en reseau
+						bzero(&(my_addr.sin_zero), 8);									// mise a zero du reste de la structure
 					}
 					// Initialisation de la structure sockadr_in. Preciser le port et l'adresse ip distante
 					void setTheirAddr(std::string addr, int port_){
-						their_addr.sin_addr.s_addr = inet_addr((char*)addr.c_str());        // ip
-						their_addr.sin_family = AF_INET;                                    // type de la socket
-						their_addr.sin_port = ntohs(port_);                                 // port, converti en reseau
-						bzero(&(their_addr.sin_zero), 8);                                   // mise a zero du reste de la structure
+						their_addr.sin_addr.s_addr = inet_addr((char*)addr.c_str());	// ip
+						their_addr.sin_family = AF_INET;								// type de la socket
+						their_addr.sin_port = ntohs(port_);								// port, converti en reseau
+						bzero(&(their_addr.sin_zero), 8);								// mise a zero du reste de la structure
 					}
 					void envoyer(char * c, int sockfd){
 						if(sockfd != -1) {
@@ -88,7 +87,7 @@ namespace socket_overlay {
 				// network
 					// Creation d'une connexion
 					void connection(){
-						if(connect(socket_, (struct sockaddr *)&their_addr, sizeof(struct sockaddr)) == -1)
+						if(connect(socket_, (struct sockaddr*)&their_addr, sizeof(struct sockaddr)) == -1)
 							print_error_and_exit("CONNEXION");
 					}
 					// -1 pour la socket main
@@ -159,7 +158,7 @@ namespace socket_overlay {
 							printf("server: got deconnexion\n");
 						}
 					}
-					// envoie en broadcast un message à un vecteur de sockets
+					// envoie en broadcast un message ?un vecteur de sockets
 					void envoyerGroup(char * c, std::vector<int> destinataires){
 						for(const int& element : destinataires) {
 							if(send(element, c, strlen(c), 0) == -1)
